@@ -9,11 +9,13 @@ RUN npm install
 # ─── Stage 2: Builder ─────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 WORKDIR /app
+# Prisma needs openssl on Alpine
+RUN apk add --no-cache openssl
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Generate Prisma Client
-RUN npx prisma generate
+# Generate Prisma Client (uses the binary from devDependencies)
+RUN npx prisma generate --schema=./prisma/schema.prisma
 
 # Build Next.js
 ENV NEXT_TELEMETRY_DISABLED 1
