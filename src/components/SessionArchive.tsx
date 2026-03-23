@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useSessionStore } from '@/lib/store';
-import { getSessions, deleteSession, SessionRecord } from '@/lib/storage';
+import { SessionRecord } from '@/lib/storage';
 import {
   Search, Trash2, ChevronDown, ChevronUp,
-  Home, Clock, Music, RotateCcw, Star, Zap,
+  Home, Clock, Music, RotateCcw, Star, Zap, Loader2
 } from 'lucide-react';
 
 function formatDuration(seconds: number): string {
@@ -37,18 +37,21 @@ function MiniStars({ rating }: { rating?: number }) {
 export function SessionArchive() {
   const goHome = useSessionStore((s) => s.goHome);
   const replayMission = useSessionStore((s) => s.replayMission);
-  const [sessions, setSessions] = useState<SessionRecord[]>([]);
+  const sessions = useSessionStore((s) => s.sessions);
+  const isLoading = useSessionStore((s) => s.isLoading);
+  const fetchSessions = useSessionStore((s) => s.fetchSessions);
+  const removeSession = useSessionStore((s) => s.removeSession);
+
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
 
   useEffect(() => {
-    setSessions(getSessions());
-  }, []);
+    fetchSessions();
+  }, [fetchSessions]);
 
-  const handleDelete = (id: string) => {
-    deleteSession(id);
-    setSessions(getSessions());
+  const handleDelete = async (id: string) => {
+    await removeSession(id);
     if (expanded === id) setExpanded(null);
   };
 
@@ -107,7 +110,12 @@ export function SessionArchive() {
       </div>
 
       {/* Sessions */}
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+          <Loader2 className="animate-spin text-amber-500" size={32} />
+          <p className="text-zinc-500 text-sm font-mono tracking-widest">LOADING ARCHIVE...</p>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="text-center py-20">
           <p className="text-5xl mb-4">📼</p>
           <p className="text-zinc-500 text-sm">
