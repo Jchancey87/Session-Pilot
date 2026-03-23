@@ -10,9 +10,15 @@ module.exports = {
     extend: {
       fontFamily: {
         mono: ['var(--font-jetbrains)', 'JetBrains Mono', 'Courier New', 'monospace'],
-        sans: ['var(--font-jetbrains)', 'JetBrains Mono', 'monospace'],
+        sans: ['var(--font-inter)', 'Inter', 'sans-serif'],
       },
       colors: {
+        sonic: {
+          primary: '#00F5FF',
+          secondary: '#448084',
+          tertiary: '#FFDB3F',
+          neutral: '#121212',
+        },
         zinc: {
           950: '#09090b',
         },

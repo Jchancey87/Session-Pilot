@@ -20,31 +20,35 @@ export function ChaosOverlay() {
   return (
     <div
       id="chaos-overlay"
-      className="fixed inset-0 z-50 flex items-center justify-center cursor-pointer chaos-overlay"
+      className="fixed inset-0 z-[200] flex items-center justify-center cursor-pointer bg-[#0A0A0A]/80 backdrop-blur-2xl transition-all duration-500"
       onClick={dismissChaos}
     >
       {/* Animated noise texture overlay */}
-      <div className="absolute inset-0 opacity-10"
+      <div className="absolute inset-0 opacity-5 pointer-events-none"
         style={{
           backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E")`,
           backgroundSize: '200px 200px',
         }}
       />
+      {/* Central glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60vw] h-[60vh] bg-sonic-primary/10 blur-[120px] rounded-full pointer-events-none" />
 
-      <div className="relative text-center px-8 max-w-3xl animate-[chaosIn_0.3s_ease-out_forwards]">
+      <div className="relative text-center px-8 max-w-4xl animate-[chaosIn_0.4s_cubic-bezier(0.16,1,0.3,1)_forwards]">
         {/* CHAOS label */}
-        <div className="amber-glow opacity-80 text-xs tracking-[0.5em] uppercase font-mono mb-6">
-          ◈ OBLIQUE STRATEGY ◈
+        <div className="text-sonic-primary opacity-80 text-[10px] tracking-[0.5em] uppercase font-mono mb-8 flex items-center justify-center gap-4">
+          <span className="w-8 h-px bg-sonic-primary/50" />
+          OBLIQUE STRATEGY
+          <span className="w-8 h-px bg-sonic-primary/50" />
         </div>
 
         {/* Strategy text */}
-        <p className="amber-glow text-4xl md:text-6xl font-bold leading-tight tracking-tight">
+        <p className="text-white drop-shadow-[0_0_30px_rgba(0,245,255,0.4)] text-5xl md:text-7xl font-bold leading-tight tracking-tight">
           {chaosStrategy}
         </p>
 
         {/* Dismiss hint */}
-        <p className="amber-glow opacity-50 text-xs tracking-widest uppercase mt-10 font-mono">
-          CLICK OR WAIT 8 SECONDS
+        <p className="text-zinc-500 opacity-60 text-[10px] tracking-[0.2em] uppercase mt-16 font-mono">
+          CLICK ANYWHERE TO ACKNOWLEDGE
         </p>
       </div>
     </div>

@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id                  String   @id @default(cuid())
+  date                DateTime @default(now())
+  projectName         String
+  missionId           String
+  missionName         String
+  phasesCompleted     Int
+  totalPhases         Int
+  duration            Int
+  digitaktPattern     String?
+  rhodesSettings      String?
+  synthPatch          String?
+  notes               String?
+  energyRating        Int?
+  moodEmoji           String?
+  chaosStrategiesUsed String[]
+  isFavorite          Boolean  @default(false)
+
+  @@index([date])
+}

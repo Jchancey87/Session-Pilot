@@ -5,6 +5,7 @@
 /* ── Base ───────────────────────────────────────────────────────────────── */
 :root {
   --font-jetbrains: 'JetBrains Mono', monospace;
+  --font-inter: 'Inter', sans-serif;
 }
 
 * {
@@ -16,8 +17,7 @@ html {
 }
 
 body {
-  font-family: var(--font-jetbrains), 'Courier New', monospace;
-  background-color: #09090b;
+  background-color: #121212;
   color: #fff;
   overflow-x: hidden;
 }
@@ -70,3 +70,27 @@ button, a {
   0%, 100% { opacity: 0.9; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.02); }
 }
+
+/* ── Ambient Ring — slow breathing pulse behind the timer ───────────────── */
+@keyframes ambientPulse {
+  0%, 100% { opacity: 0.35; transform: translate(-50%, -50%) scale(1); }
+  50%       { opacity: 0.65; transform: translate(-50%, -50%) scale(1.06); }
+}
+
+.ambient-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: ambientPulse 3s ease-in-out infinite;
+  filter: blur(48px);
+}
+
+/* Per-mission-color variants mapped to Sonic Flow colors */
+.ambient-amber  { background: radial-gradient(circle, rgba(255, 219, 63, 0.25) 0%, transparent 70%); }
+.ambient-emerald { background: radial-gradient(circle, rgba(0, 245, 255, 0.25) 0%, transparent 70%); }
+.ambient-violet { background: radial-gradient(circle, rgba(68, 128, 132, 0.25) 0%, transparent 70%); }
+.ambient-cyan   { background: radial-gradient(circle, rgba(0, 245, 255, 0.25) 0%, transparent 70%); }
+

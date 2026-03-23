@@ -1,4 +1,4 @@
-// ─── LocalStorage Persistence ────────────────────────────────────────────────
+// ─── API & Persistent Storage (PostgreSQL via Next.js API) ───────────────────
 
 export interface SessionRecord {
   id: string;
@@ -9,42 +9,92 @@ export interface SessionRecord {
   phasesCompleted: number;
   totalPhases: number;
   duration: number;        // seconds actually elapsed
-  digitaktPattern: string;
-  rhodesSettings: string;
-  synthPatch: string;
-  notes: string;
+  digitaktPattern?: string;
+  rhodesSettings?: string;
+  synthPatch?: string;
+  notes?: string;
+  energyRating?: number;          // 1–5
+  moodEmoji?: string;             // ⚡ 🔥 💤 🌀 🎯
+  chaosStrategiesUsed?: string[]; // strategies triggered during the session
+  isFavorite?: boolean;
 }
 
 const STORAGE_KEY = 'session-pilot-sessions';
 
-export function getSessions(): SessionRecord[] {
-  if (typeof window === 'undefined') return [];
+/**
+ * Fetch all sessions from the database
+ */
+export async function getSessions(): Promise<SessionRecord[]> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as SessionRecord[]) : [];
-  } catch {
+    const res = await fetch('/api/sessions');
+    if (!res.ok) throw new Error('Failed to fetch');
+    return await res.json();
+  } catch (error) {
+    console.error('API Error:', error);
     return [];
   }
 }
 
-export function saveSession(session: SessionRecord): void {
-  if (typeof window === 'undefined') return;
-  const sessions = getSessions();
-  const existing = sessions.findIndex((s) => s.id === session.id);
-  if (existing >= 0) {
-    sessions[existing] = session;
-  } else {
-    sessions.unshift(session); // newest first
+/**
+ * Save or update a session in the database
+ */
+export async function saveSession(session: SessionRecord): Promise<void> {
+  try {
+    const res = await fetch('/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(session),
+    });
+    if (!res.ok) throw new Error('Failed to save');
+  } catch (error) {
+    console.error('API Error:', error);
+    // Fallback? For now just log.
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
 }
 
-export function deleteSession(id: string): void {
-  if (typeof window === 'undefined') return;
-  const sessions = getSessions().filter((s) => s.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+/**
+ * Delete a session from the database
+ */
+export async function deleteSession(id: string): Promise<void> {
+  try {
+    const res = await fetch(`/api/sessions/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete');
+  } catch (error) {
+    console.error('API Error:', error);
+  }
+}
+
+/**
+ * Utility to migrate data from localStorage to PostgreSQL
+ */
+export async function migrateFromLocalStorage(): Promise<number> {
+  if (typeof window === 'undefined') return 0;
+  
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return 0;
+
+  try {
+    const localSessions = JSON.parse(raw) as SessionRecord[];
+    if (localSessions.length === 0) return 0;
+
+    console.log(`Migrating ${localSessions.length} sessions to PostgreSQL...`);
+    
+    for (const session of localSessions) {
+      await saveSession(session);
+    }
+
+    // Clear localStorage after successful migration
+    localStorage.removeItem(STORAGE_KEY);
+    return localSessions.length;
+  } catch (error) {
+    console.error('Migration failed:', error);
+    return 0;
+  }
 }
 
 export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
+

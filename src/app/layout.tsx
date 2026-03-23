@@ -1,6 +1,12 @@
 import type { Metadata, Viewport } from 'next';
-import { JetBrains_Mono } from 'next/font/google';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+});
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
@@ -28,11 +34,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`dark ${jetbrainsMono.variable}`}>
+    <html lang="en" className={`dark ${inter.variable} ${jetbrainsMono.variable}`}>
       <head>
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
-      <body className="bg-zinc-950 text-white antialiased font-mono min-h-screen">
+      <body className="bg-sonic-neutral text-white antialiased font-sans min-h-screen">
         {children}
       </body>
     </html>

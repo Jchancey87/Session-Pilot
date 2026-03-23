@@ -2,51 +2,60 @@
 
 import { create } from 'zustand';
 import { Mission, Phase, MISSIONS } from '@/lib/missions';
-import { SessionRecord, generateId } from '@/lib/storage';
+import { SessionRecord, generateId, getSessions, saveSession, deleteSession, migrateFromLocalStorage } from '@/lib/storage';
+import { getStrategyForInstrument } from '@/lib/strategies';
+import { playChaosChime, playTransitionChime } from '@/lib/audio';
 
 export type AppScreen =
   | 'IDLE'           // Mission selector
   | 'PRE_SESSION'    // Project name input
   | 'RUNNING'        // Timer active
+  | 'PHASE_TRANSITION' // Between stages
   | 'POST_SESSION'   // Save form
   | 'ARCHIVE';       // History list
 
 interface SessionState {
-  // ── Screen ────────────────────────────────────────────────────────────────
+  // ... current fields ...
   screen: AppScreen;
-
-  // ── Mission ───────────────────────────────────────────────────────────────
   selectedMission: Mission | null;
   currentPhaseIndex: number;
-  timeRemaining: number;   // seconds
+  timeRemaining: number;
   isRunning: boolean;
-  sessionStartTime: number | null;  // Date.now() when session began
-
-  // ── Pre-session fields ────────────────────────────────────────────────────
+  sessionStartTime: number | null;
   projectName: string;
   sessionId: string;
-
-  // ── Chaos ─────────────────────────────────────────────────────────────────
   chaosVisible: boolean;
   chaosStrategy: string;
+  capturedChaosStrategies: string[];
+  autoChaosFiredThisPhase: boolean;
+  
+  // Persistent data
+  sessions: SessionRecord[];
+  isLoading: boolean;
 
-  // ── Actions ───────────────────────────────────────────────────────────────
+  // Actions
   selectMission: (mission: Mission) => void;
   setProjectName: (name: string) => void;
   startSession: () => void;
-  tickTimer: () => void;           // called every second by PhaseTimer
+  tickTimer: () => void;
   advancePhase: () => void;
+  startNextPhase: () => void; // New action to exit transition
   pauseTimer: () => void;
   resumeTimer: () => void;
-  triggerChaos: (strategy: string) => void;
+  triggerChaos: (strategy?: string) => void;
   dismissChaos: () => void;
-  endSession: () => void;          // go to POST_SESSION
+  endSession: () => void;
   goToArchive: () => void;
   goHome: () => void;
-
-  // ── Derived helpers ───────────────────────────────────────────────────────
+  replayMission: (missionId: string) => void;
   currentPhase: () => Phase | null;
   pendingSession: () => Partial<SessionRecord>;
+  
+  // Async Data Actions
+  fetchSessions: () => Promise<void>;
+  saveCurrentSession: (overrides: Partial<SessionRecord>) => Promise<void>;
+  removeSession: (id: string) => Promise<void>;
+  migrateData: () => Promise<number>;
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
@@ -60,6 +69,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   sessionId: generateId(),
   chaosVisible: false,
   chaosStrategy: '',
+  capturedChaosStrategies: [],
+  autoChaosFiredThisPhase: false,
+  sessions: [],
+  isLoading: false,
 
   selectMission: (mission) =>
     set({ selectedMission: mission, screen: 'PRE_SESSION', currentPhaseIndex: 0 }),
@@ -75,41 +88,109 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       currentPhaseIndex: 0,
       timeRemaining: selectedMission.phases[0].durationSeconds,
       sessionStartTime: Date.now(),
+      capturedChaosStrategies: [],
+      autoChaosFiredThisPhase: false,
     });
   },
 
   tickTimer: () => {
-    const { timeRemaining, isRunning } = get();
+    const {
+      timeRemaining, isRunning, selectedMission,
+      currentPhaseIndex, autoChaosFiredThisPhase, chaosVisible,
+      advancePhase
+    } = get();
     if (!isRunning) return;
+
     if (timeRemaining > 0) {
       set({ timeRemaining: timeRemaining - 1 });
+    } else {
+      // Auto-advance
+      advancePhase();
     }
-    // Auto-advance is handled by PhaseTimer useEffect watching timeRemaining === 0
+
+    // Auto-fire chaos at 30% of phase elapsed
+    if (!autoChaosFiredThisPhase && !chaosVisible && selectedMission) {
+      const phase = selectedMission.phases[currentPhaseIndex];
+      const elapsed = phase.durationSeconds - timeRemaining;
+      const triggerAt = Math.floor(phase.durationSeconds * 0.3);
+      if (elapsed >= triggerAt && elapsed > 0) {
+        const strategy = getStrategyForInstrument(phase.instrument);
+        playChaosChime();
+        set({
+          chaosVisible: true,
+          chaosStrategy: strategy,
+          capturedChaosStrategies: [...get().capturedChaosStrategies, strategy],
+          autoChaosFiredThisPhase: true,
+        });
+      }
+    }
   },
 
   advancePhase: () => {
     const { selectedMission, currentPhaseIndex } = get();
     if (!selectedMission) return;
-    const nextIndex = currentPhaseIndex + 1;
-    if (nextIndex >= selectedMission.phases.length) {
+    
+    // Play transition chime
+    playTransitionChime();
+
+    if (currentPhaseIndex >= selectedMission.phases.length - 1) {
       // Mission complete → POST_SESSION
       set({ isRunning: false, screen: 'POST_SESSION' });
     } else {
-      set({
-        currentPhaseIndex: nextIndex,
-        timeRemaining: selectedMission.phases[nextIndex].durationSeconds,
+      // Transition state
+      set({ 
+        isRunning: false, 
+        screen: 'PHASE_TRANSITION',
+        autoChaosFiredThisPhase: false 
       });
     }
+  },
+
+  startNextPhase: () => {
+    const { selectedMission, currentPhaseIndex } = get();
+    if (!selectedMission) return;
+    const nextIndex = currentPhaseIndex + 1;
+    set({
+      screen: 'RUNNING',
+      isRunning: true,
+      currentPhaseIndex: nextIndex,
+      timeRemaining: selectedMission.phases[nextIndex].durationSeconds,
+    });
   },
 
   pauseTimer: () => set({ isRunning: false }),
   resumeTimer: () => set({ isRunning: true }),
 
-  triggerChaos: (strategy) => set({ chaosVisible: true, chaosStrategy: strategy }),
+  triggerChaos: (strategy) => {
+    set((state) => {
+      const generatedStrategy = strategy || getStrategyForInstrument(state.selectedMission?.phases[state.currentPhaseIndex]?.instrument || 'General');
+      return {
+        chaosVisible: true,
+        chaosStrategy: generatedStrategy,
+        // Record manual chaos triggers in history too
+        capturedChaosStrategies: [...state.capturedChaosStrategies, generatedStrategy],
+      };
+    });
+  },
+
   dismissChaos: () => set({ chaosVisible: false }),
 
   endSession: () => set({ isRunning: false, screen: 'POST_SESSION' }),
   goToArchive: () => set({ screen: 'ARCHIVE' }),
+
+  replayMission: (missionId: string) => {
+    const mission = MISSIONS.find((m) => m.id === missionId);
+    if (!mission) return;
+    set({
+      selectedMission: mission,
+      screen: 'PRE_SESSION',
+      currentPhaseIndex: 0,
+      projectName: '',
+      sessionId: generateId(),
+      capturedChaosStrategies: [],
+      autoChaosFiredThisPhase: false,
+    });
+  },
 
   goHome: () =>
     set({
@@ -121,6 +202,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       projectName: '',
       sessionId: generateId(),
       chaosVisible: false,
+      capturedChaosStrategies: [],
+      autoChaosFiredThisPhase: false,
     }),
 
   currentPhase: () => {
@@ -141,6 +224,32 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       totalPhases: selectedMission?.phases.length ?? 0,
       duration: elapsed,
     };
+  },
+
+  fetchSessions: async () => {
+    set({ isLoading: true });
+    const sessions = await getSessions();
+    set({ sessions, isLoading: false });
+  },
+
+  saveCurrentSession: async (overrides) => {
+    const { pendingSession } = get();
+    const sessionToSave = { ...pendingSession(), ...overrides } as SessionRecord;
+    await saveSession(sessionToSave);
+    await get().fetchSessions(); // Refresh list
+  },
+
+  removeSession: async (id) => {
+    await deleteSession(id);
+    await get().fetchSessions(); // Refresh list
+  },
+
+  migrateData: async () => {
+    const count = await migrateFromLocalStorage();
+    if (count > 0) {
+      await get().fetchSessions();
+    }
+    return count;
   },
 }));
 

@@ -11,6 +11,46 @@ function formatTime(seconds: number): string {
   return `${m}:${s}`;
 }
 
+// ── Mission color → class mappings ───────────────────────────────────────────
+const COLOR_MAP = {
+  amber: {
+    timer: 'text-sonic-tertiary',
+    timerGlow: '',
+    phaseName: 'text-sonic-tertiary',
+    progressBar: 'bg-sonic-tertiary',
+    overallBar: 'bg-sonic-tertiary/40',
+    dot: 'bg-sonic-tertiary',
+    ambientRing: 'ambient-amber',
+  },
+  emerald: {
+    timer: 'text-sonic-primary',
+    timerGlow: '',
+    phaseName: 'text-sonic-primary',
+    progressBar: 'bg-sonic-primary',
+    overallBar: 'bg-sonic-primary/40',
+    dot: 'bg-sonic-primary',
+    ambientRing: 'ambient-emerald',
+  },
+  violet: {
+    timer: 'text-sonic-secondary',
+    timerGlow: '',
+    phaseName: 'text-sonic-secondary',
+    progressBar: 'bg-sonic-secondary',
+    overallBar: 'bg-sonic-secondary/40',
+    dot: 'bg-sonic-secondary',
+    ambientRing: 'ambient-violet',
+  },
+  cyan: {
+    timer: 'text-sonic-primary',
+    timerGlow: '',
+    phaseName: 'text-sonic-primary',
+    progressBar: 'bg-sonic-primary',
+    overallBar: 'bg-sonic-primary/40',
+    dot: 'bg-sonic-primary',
+    ambientRing: 'ambient-cyan',
+  },
+};
+
 export function PhaseTimer() {
   const selectedMission = useSessionStore((s) => s.selectedMission);
   const currentPhaseIndex = useSessionStore((s) => s.currentPhaseIndex);
@@ -43,13 +83,11 @@ export function PhaseTimer() {
     wakeLockRef.current = null;
   }, []);
 
-  // Acquire Wake Lock when component mounts, release on unmount
   useEffect(() => {
     requestWakeLock();
     return () => releaseWakeLock();
   }, [requestWakeLock, releaseWakeLock]);
 
-  // Re-acquire wake lock if browser releases it (e.g. tab visibility change)
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') requestWakeLock();
@@ -79,14 +117,34 @@ export function PhaseTimer() {
     prevTimeRef.current = timeRemaining;
   }, [timeRemaining, advancePhase]);
 
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        isRunning ? pauseTimer() : resumeTimer();
+      } else if (e.code === 'KeyS') {
+        e.preventDefault();
+        playTransitionChime();
+        advancePhase();
+      } else if (e.code === 'KeyE') {
+        e.preventDefault();
+        endSession();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isRunning, pauseTimer, resumeTimer, advancePhase, endSession]);
+
   if (!selectedMission || !currentPhase) return null;
 
+  const c = COLOR_MAP[selectedMission.color];
   const totalPhases = selectedMission.phases.length;
   const phaseDuration = currentPhase.durationSeconds;
   const elapsed = phaseDuration - timeRemaining;
   const progress = Math.min(elapsed / phaseDuration, 1);
 
-  // Overall progress across all phases
   const totalSeconds = selectedMission.phases.reduce((a, p) => a + p.durationSeconds, 0);
   const completedSeconds = selectedMission.phases
     .slice(0, currentPhaseIndex)
@@ -109,9 +167,9 @@ export function PhaseTimer() {
             <div
               className={`w-2 h-2 rounded-full transition-all duration-500 ${
                 i < currentPhaseIndex
-                  ? 'bg-emerald-500'
+                  ? `${c.dot} opacity-50`
                   : i === currentPhaseIndex
-                  ? 'bg-amber-500 scale-125'
+                  ? `${c.dot} scale-125`
                   : 'bg-zinc-700'
               }`}
             />
@@ -124,20 +182,28 @@ export function PhaseTimer() {
 
       {/* Phase name */}
       <div className="text-center mb-2">
-        <h2 className="text-2xl font-bold text-emerald-400 tracking-wider">
+        <h2 className={`text-2xl font-bold tracking-wider ${c.phaseName}`}>
           {currentPhase.name}
         </h2>
         <p className="text-zinc-500 text-sm">{currentPhase.instrument}</p>
       </div>
 
-      {/* Main timer */}
-      <div className="text-center my-8">
+      {/* Main timer + ambient ring */}
+      <div className="relative text-center my-8">
+        {/* Ambient breathing ring */}
         <div
-          className={`text-8xl md:text-9xl font-bold font-mono tracking-tight transition-colors duration-300 ${
+          className={`ambient-ring ${c.ambientRing}`}
+          style={{ width: '320px', height: '320px' }}
+        />
+
+        <div
+          className={`relative text-8xl md:text-9xl font-bold font-mono tracking-tight transition-colors duration-300 ${
             isLowTime
               ? 'text-red-400 animate-pulse'
-              : 'amber-glow'
-          } ${timeRemaining === 0 ? 'text-emerald-400' : ''}`}
+              : timeRemaining === 0
+              ? 'text-emerald-400'
+              : c.timer
+          }`}
         >
           {formatTime(timeRemaining)}
         </div>
@@ -147,7 +213,7 @@ export function PhaseTimer() {
       <div className="mb-2">
         <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
           <div
-            className="h-full bg-amber-500 rounded-full transition-all duration-1000"
+            className={`h-full ${c.progressBar} rounded-full transition-all duration-1000`}
             style={{ width: `${progress * 100}%` }}
           />
         </div>
@@ -157,7 +223,7 @@ export function PhaseTimer() {
       <div className="mb-8">
         <div className="h-0.5 bg-zinc-900 rounded-full overflow-hidden">
           <div
-            className="h-full bg-emerald-500/50 rounded-full transition-all duration-1000"
+            className={`h-full ${c.overallBar} rounded-full transition-all duration-1000`}
             style={{ width: `${overallProgress * 100}%` }}
           />
         </div>
@@ -176,7 +242,7 @@ export function PhaseTimer() {
         <button
           id="pause-resume-btn"
           onClick={isRunning ? pauseTimer : resumeTimer}
-          className="flex items-center gap-2 px-6 py-4 rounded-xl border border-zinc-700 hover:border-zinc-500
+          className="flex items-center gap-2 px-6 py-4 rounded-xl border border-zinc-700 hover:border-sonic-primary
             text-zinc-300 hover:text-white transition-all active:scale-95 text-sm"
         >
           {isRunning ? <Pause size={16} /> : <Play size={16} />}
@@ -186,8 +252,9 @@ export function PhaseTimer() {
         <button
           id="skip-phase-btn"
           onClick={() => { playTransitionChime(); advancePhase(); }}
-          className="flex items-center gap-2 px-6 py-4 rounded-xl border border-amber-500/40 hover:border-amber-500
-            text-amber-500 hover:text-amber-400 transition-all active:scale-95 text-sm"
+          className={`flex items-center gap-2 px-6 py-4 rounded-xl border border-opacity-40
+            transition-all active:scale-95 text-sm
+            border-zinc-600 hover:border-sonic-secondary text-zinc-400 hover:text-white`}
         >
           <SkipForward size={16} />
           Skip Phase
